@@ -1,0 +1,19 @@
+{
+  "name": "proxy-bun-api",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@node-minify/core": "^11.0.0",
+    "@node-minify/esbuild": "^11.0.0",
+    "@node-minify/minify-html": "^11.0.0",
+    "node-html-parser": "^9.0.4",
+    "svgo": "^4.1.0"
+  }
+}
