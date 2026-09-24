@@ -1,5 +1,7 @@
 import type { BunPlugin } from "bun";
 
+const platform = process.argv[2] || "linux";
+
 /**
  * css-tree/csso load their JSON data files via `createRequire(import.meta.url)`.
  * Bun's compiler doesn't statically bundle those calls (only actual `import`s),
@@ -36,28 +38,15 @@ const fixCreateRequireJson: BunPlugin = {
   }
 };
 
-const resultLinux = await Bun.build({
+const result = await Bun.build({
   entrypoints: ["./index.ts"],
   compile: {
     outfile: "./Arachnidium-api",
-    target: "bun-linux-x64"
+    target: platform === "windows" ? "bun-windows-x64" : "bun-linux-x64"
   },
   plugins: [fixCreateRequireJson]
 });
-if (!resultLinux.success) {
-  for (const log of resultLinux.logs) console.error(log);
-  process.exit(1);
-}
-
-const resultWindows = await Bun.build({
-  entrypoints: ["./index.ts"],
-  compile: {
-    outfile: "./Arachnidium-api",
-    target: "bun-windows-x64"
-  },
-  plugins: [fixCreateRequireJson]
-});
-if (!resultWindows.success) {
-  for (const log of resultWindows.logs) console.error(log);
+if (!result.success) {
+  for (const log of result.logs) console.error(log);
   process.exit(1);
 }

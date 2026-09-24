@@ -1,0 +1,108 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Install Python dependencies
+        run: uv sync
+
+      - name: Install bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install bun-api dependencies
+        working-directory: bun-api
+        run: bun install
+
+      - name: Build bun-api (Linux)
+        if: runner.os == 'Linux'
+        working-directory: bun-api
+        run: bun run build-linux
+
+      - name: Build bun-api (Windows)
+        if: runner.os == 'Windows'
+        working-directory: bun-api
+        run: bun run build-windows
+
+      - name: Build with PyInstaller
+        run: uv run pyinstaller main.py addon.py
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          mv dist/main dist/Arachnidium
+          cp addon.py azure.tcl dist/Arachnidium/
+          cp -r theme dist/Arachnidium/
+          mkdir dist/Arachnidium/bun-api
+          cp bun-api/Arachnidium-api dist/Arachnidium/bun-api/
+          chmod +x dist/Arachnidium/bun-api/Arachnidium-api
+          tar -cJf dist/Arachnidium-linux-x64.tar.xz -C dist/Arachnidium .
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Move-Item dist/main dist/Arachnidium
+          Copy-Item addon.py, azure.tcl -Destination dist/Arachnidium/
+          Copy-Item theme -Destination dist/Arachnidium/ -Recurse
+          New-Item -ItemType Directory -Path dist/Arachnidium/bun-api | Out-Null
+          Copy-Item bun-api/Arachnidium-api.exe -Destination dist/Arachnidium/bun-api/
+          Compress-Archive -Path dist/Arachnidium/* -DestinationPath dist/Arachnidium-windows-x64.zip
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: Arachnidium-${{ runner.os }}
+          path: |
+            dist/Arachnidium-*.tar.xz
+            dist/Arachnidium-*.zip
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download archives
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish rolling release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: latest
+          name: Latest build
+          body: Automated portable build from commit ${{ github.sha }}
+          commit: ${{ github.sha }}
+          artifacts: artifacts/*
+          allowUpdates: true
+          removeArtifacts: true
+          replacesArtifacts: true
+          makeLatest: true

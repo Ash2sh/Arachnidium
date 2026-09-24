@@ -4,7 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "bun build.ts"
+    "build-windows": "bun build.ts windows",
+    "build-linux": "bun build.ts linux"
   },
   "devDependencies": {
     "@types/bun": "latest"
