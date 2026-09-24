@@ -11,3 +11,6 @@ wheels/
 
 # PyInstaller generated files
 main.spec
+
+bun-api/Arachnidium-api
+bun-api/Arachnidium-api.exe

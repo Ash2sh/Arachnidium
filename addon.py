@@ -2,11 +2,13 @@ import mitmproxy
 import tkinter as tk
 from tkinter import ttk
 
+import subprocess
 import threading
 import asyncio
 import aiohttp
 import time
 import io
+import os
 
 from PIL import Image
 import requests
@@ -333,7 +335,7 @@ def response(flow: mitmproxy.http.HTTPFlow) -> None:
     flow.response.headers["content-encoding"] = encoding
     flow.response.raw_content = raw_output
   elif ENABLE_DEBUG:
-    print("SKIPPING, RECOMPRESSED OUTPUT IS LARGER:", len(raw_output), ">" , len(flow.response.raw_content))
+    print("SKIPPING, RECOMPRESSED OUTPUT IS LARGER:", len(raw_output), ">", len(flow.response.raw_content))
     print("Server using", flow.response.headers.get("content-encoding"), "we're using", encoding)
 
   return count_savings(size_before, len(flow.response.raw_content))
@@ -348,10 +350,16 @@ def dns_request(flow: mitmproxy.dns.DNSFlow) -> None:
       flow.response = flow.request.fail(mitmproxy.dns.response_codes.NXDOMAIN)
 
 def load(loader: mitmproxy.addonmanager.Loader):
-  print("load")
   if ENABLE_GUI:
     gui_thread = threading.Thread(target=start_gui, daemon=True)
     gui_thread.start()
+
+  # Start Bun API
+  global bun_api_process
+  if os.name == "posix":
+    bun_api_process = subprocess.Popen(["bun-api/Arachnidium-api"])
+  else:
+    bun_api_process = subprocess.Popen(["bun-api/Arachnidium-api.exe"])
 
   # Download DNS blocklist
   global DNS_BLOCKLIST
@@ -361,10 +369,12 @@ def load(loader: mitmproxy.addonmanager.Loader):
   DNS_BLOCKLIST = list(filter(lambda s: not s.startswith("#"), DNS_BLOCKLIST))
 
 def done():
-  print("done")
   global ENABLE_GUI, gui_root
   if ENABLE_GUI and "gui_root" in globals() and gui_root:
     print("destroying")
     gui_root.after(0, lambda: {
       gui_root.destroy()
     })
+  global bun_api_process
+  if "bun_api_process" in globals():
+    bun_api_process.terminate()
