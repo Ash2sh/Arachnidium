@@ -355,11 +355,12 @@ def load(loader: mitmproxy.addonmanager.Loader):
     gui_thread.start()
 
   # Start Bun API
-  global bun_api_process
-  if os.name == "posix":
-    bun_api_process = subprocess.Popen(["bun-api/Arachnidium-api"])
+  api_binary_name = "bun-api/Arachnidium-api" if os.name == "posix" else "bun-api/Arachnidium-api.exe"
+  if os.path.exists(api_binary_name):
+    global bun_api_process
+    bun_api_process = subprocess.Popen([api_binary_name])
   else:
-    bun_api_process = subprocess.Popen(["bun-api/Arachnidium-api.exe"])
+    print("Warning: Could not find Bun API binary - please start it manually.")
 
   # Download DNS blocklist
   global DNS_BLOCKLIST
