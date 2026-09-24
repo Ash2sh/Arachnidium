@@ -80,8 +80,11 @@ speculative_cache = {}
 async def do_async_http_request(url: str):
   async with aiohttp.ClientSession() as session:
     async with session.get(url) as response:
-      body = await response.read()
-      return (body, response)
+      try:
+        body = await response.read()
+        return (body, response)
+      except:
+        return None
 
 def check_dns_blocklist(host: str):
   global DNS_BLOCKLIST
@@ -106,6 +109,7 @@ async def request(flow: mitmproxy.http.HTTPFlow) -> None:
   (body, res) = await cached_response
   # Remove it from the cache.
   del speculative_cache[flow.request.pretty_url]
+  if not cached_response: return
 
   headers = mitmproxy.http.Headers()
   for header in res.headers:
