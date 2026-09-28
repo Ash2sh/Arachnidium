@@ -41,7 +41,7 @@ def start_gui():
   frame_root = ttk.Frame(gui_root)
   frame_root.pack(fill="both", expand=True, padx=100, pady=30)
 
-  gui_root.tk.call("source", "azure.tcl")
+  gui_root.tk.call("source", "theme/azure.tcl")
   gui_root.tk.call("set_theme", "light")
 
   ttk.Label(frame_root, name="saved-label", text="Data saved: 0B", font=("Helvetica", 14)).pack()

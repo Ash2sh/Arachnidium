@@ -22,7 +22,7 @@ To run this project from source code without building it (for development purpos
 
 1. Install Python and [uv](https://docs.astral.sh/uv/).
 2. Install [Bun](https://bun.sh/).
-3. Clone this repository.
+3. Clone this repository with submodules (using `--recursive`).
 4. Run `uv run main.py`
 5. In another terminal, change directory to `bun-api` and run `bun i`, then `bun run index.ts`
 
