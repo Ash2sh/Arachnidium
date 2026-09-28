@@ -10,9 +10,10 @@ import time
 import io
 import os
 
-from PIL import Image
+from PIL import Image, ImageTk
 import requests
 import json
+import qrcode
 
 import gzip
 import zlib as deflate
@@ -53,7 +54,7 @@ def start_gui():
   image_quality_label = ttk.Label(frame_root, text="Image Quality (" + str(IMAGE_QUALITY) + ")")
   image_quality_label.pack()
 
-  def update_settings (_=0):
+  def update_settings(_=0):
     global IMAGE_QUALITY, FORCE_MAX_COMPRESSION, USE_SPECULATIVE_CACHE, CLEAR_HTTP_ERRORS, BLOCK_ADS, ENABLE_DEBUG
     IMAGE_QUALITY=tk_IMAGE_QUALITY.get()
     FORCE_MAX_COMPRESSION=tk_FORCE_MAX_COMPRESSION.get()
@@ -69,6 +70,21 @@ def start_gui():
   ttk.Checkbutton(frame_root, text="Clear HTTP Error Body", variable=tk_CLEAR_HTTP_ERRORS, command=update_settings).pack()
   ttk.Checkbutton(frame_root, text="Block Ads", variable=tk_BLOCK_ADS, command=update_settings).pack()
   ttk.Checkbutton(frame_root, text="Debug Mode", variable=tk_ENABLE_DEBUG, command=update_settings).pack()
+
+  def open_qrcode_window():
+    new_window = tk.Toplevel(frame_root)
+    new_window.title("WireGuard Configuration QR Code")
+    new_window.geometry("300x300")
+    with open("wireguard.cfg", "r") as wg_config_file:
+      config = wg_config_file.read()
+      config_qr = qrcode.make(config)
+      config_qr = config_qr.resize((300, 300))
+      qr_img = ImageTk.PhotoImage(config_qr)
+      panel = tk.Label(new_window, image=qr_img)
+      panel.img = qr_img
+      panel.pack()
+
+  ttk.Button(frame_root, text="Show WireGuard QR Code", command=open_qrcode_window).pack(pady=(10, 0))
 
   def on_window_close():
     mitmproxy.ctx.master.shutdown()
@@ -361,6 +377,30 @@ def load(loader: mitmproxy.addonmanager.Loader):
     bun_api_process = subprocess.Popen([api_binary_name])
   else:
     print("Warning: Could not find Bun API binary - please start it manually.")
+
+  # Generate WireGuard config
+  wan_ip_req = requests.get("https://api.ipify.org")
+  if wan_ip_req.status_code != 200 or not wan_ip_req.text:
+    wan_ip_req = requests.get("https://api.seeip.org")
+  wan_ip = wan_ip_req.text
+  with open("wg-keys.json", "r") as keys_file:
+    wg_keys = json.loads(keys_file.read())
+    config = f"""\
+# This file was automatically generated.
+# To change keys, edit `wg-keys.json` instead.
+
+[Interface]
+PrivateKey = {wg_keys["client_key"]}
+Address = 10.0.0.1/32
+DNS = 10.0.0.53
+
+[Peer]
+PublicKey = {wg_keys["server_key"]}
+AllowedIPs = 0.0.0.0/0
+Endpoint = {wan_ip}:51820"""
+    # Write config to file
+    with open("wireguard.cfg", "w") as config_file:
+      config_file.write(config)
 
   # Download DNS blocklist
   global DNS_BLOCKLIST

@@ -10,6 +10,7 @@ dependencies = [
     "brotli>=1.2.0",
     "mitmproxy>=12.2.3",
     "pillow>=12.3.0",
+    "qrcode[pil]>=8.2",
     "requests>=2.34.2",
 ]
 
