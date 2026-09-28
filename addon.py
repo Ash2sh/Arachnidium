@@ -20,13 +20,15 @@ import zlib as deflate
 import brotli as br
 import zstandard as zstd
 
-ENABLE_GUI = True
-FORCE_MAX_COMPRESSION = False
-IMAGE_QUALITY = 20
-USE_SPECULATIVE_CACHE = True
-CLEAR_HTTP_ERRORS = True
-BLOCK_ADS = True
-ENABLE_DEBUG = False
+with open("defaults.json", "r") as defaults_json:
+  defaults = json.loads(defaults_json.read())
+  ENABLE_GUI = defaults["ENABLE_GUI"]
+  FORCE_MAX_COMPRESSION = defaults["FORCE_MAX_COMPRESSION"]
+  IMAGE_QUALITY = defaults["IMAGE_QUALITY"]
+  USE_SPECULATIVE_CACHE = defaults["USE_SPECULATIVE_CACHE"]
+  CLEAR_HTTP_ERRORS = defaults["CLEAR_HTTP_ERRORS"]
+  BLOCK_ADS = defaults["BLOCK_ADS"]
+  ENABLE_DEBUG = defaults["ENABLE_DEBUG"]
 
 def start_gui():
   if not ENABLE_GUI: return

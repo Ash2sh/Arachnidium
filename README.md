@@ -12,6 +12,10 @@ Data-optimizing HTTP(S) proxy, powered by [mitmproxy](https://www.mitmproxy.org/
 5. This is where things get a little hairy - if you want to actually use this outside of your home WiFi, you'll have to configure your network to listen for incoming VPN connections. To do this, you will have to forward **UDP** port **51820** from your home server to your router. The exact process for this is vastly different for every network and router, and it would be impossible to give a universal guide in this document, so please research this yourself. Searching for "port forward udp \<router model\>" should be enough to get you on the right track. Alternatively, call your internet service provider and ask if they can help.
 6. Connect to the VPN and visit `mitm.it` on your phone's browser. Follow the instructions there to set up the certificate authority. ***Make sure to read all of the instructions.***
 
+## Configuration
+
+There are two ways to configure Arachnidium: via the graphical interface, or by editing `defaults.json`. Changes made in the GUI are not saved between restarts - for that, use the JSON file. If you want to run Arachnidium without the GUI, set `ENABLE_GUI` to `false` in `defaults.json`.
+
 ## Running from source
 
 To run this project from source code without building it (for development purposes, or to run on unsupported platforms):
