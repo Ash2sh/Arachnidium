@@ -58,7 +58,7 @@ jobs:
         run: |
           mv dist/main/main dist/main/Arachnidium
           mv dist/main dist/Arachnidium
-          cp addon.py azure.tcl dist/Arachnidium/
+          cp addon.py dist/Arachnidium/
           cp -r theme dist/Arachnidium/
           mkdir dist/Arachnidium/bun-api
           cp bun-api/Arachnidium-api dist/Arachnidium/bun-api/
@@ -71,7 +71,7 @@ jobs:
         run: |
           Move-Item dist/main/main.exe dist/main/Arachnidium.exe
           Move-Item dist/main dist/Arachnidium
-          Copy-Item addon.py, azure.tcl -Destination dist/Arachnidium/
+          Copy-Item addon.py -Destination dist/Arachnidium/
           Copy-Item theme -Destination dist/Arachnidium/ -Recurse
           New-Item -ItemType Directory -Path dist/Arachnidium/bun-api | Out-Null
           Copy-Item bun-api/Arachnidium-api.exe -Destination dist/Arachnidium/bun-api/
