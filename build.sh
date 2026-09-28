@@ -3,7 +3,6 @@ source .venv/bin/activate
 pyinstaller main.py addon.py
 mv dist/main dist/Arachnidium
 cp addon.py dist/Arachnidium/
-cp azure.tcl dist/Arachnidium/
 cp -r theme dist/Arachnidium/
 cd bun-api
 bun run build
