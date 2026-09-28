@@ -26,6 +26,7 @@ with open("defaults.json", "r") as defaults_json:
   FORCE_MAX_COMPRESSION = defaults["FORCE_MAX_COMPRESSION"]
   IMAGE_QUALITY = defaults["IMAGE_QUALITY"]
   USE_SPECULATIVE_CACHE = defaults["USE_SPECULATIVE_CACHE"]
+  SPECULATIVE_CACHE_MAX_ENTRIES = defaults["SPECULATIVE_CACHE_MAX_ENTRIES"]
   CLEAR_HTTP_ERRORS = defaults["CLEAR_HTTP_ERRORS"]
   BLOCK_ADS = defaults["BLOCK_ADS"]
   ENABLE_DEBUG = defaults["ENABLE_DEBUG"]
@@ -125,7 +126,7 @@ async def request(flow: mitmproxy.http.HTTPFlow) -> None:
     return
 
   # Retrieve cached HTTP response, await if necessary.
-  cached_response = speculative_cache[flow.request.pretty_url]
+  (cached_response, timestamp) = speculative_cache[flow.request.pretty_url]
   (body, res) = await cached_response
   # Remove it from the cache.
   del speculative_cache[flow.request.pretty_url]
@@ -306,11 +307,23 @@ def response(flow: mitmproxy.http.HTTPFlow) -> None:
   else:
     output = flow.response.content
 
+  # Create async tasks for speculative caching, remove old entries from cache.
   if USE_SPECULATIVE_CACHE and not flow.is_replay:
     for link in speculated_links:
       if ENABLE_DEBUG: print("Caching", link)
       task = asyncio.create_task(do_async_http_request(link))
-      speculative_cache[link] = task
+      timestamp = time.time()
+      if len(speculative_cache) >= SPECULATIVE_CACHE_MAX_ENTRIES:
+        oldest_link = None
+        oldest_timestamp = timestamp
+        for curr_link, curr_val in speculative_cache.items():
+          curr_timestamp = curr_val[1]
+          if curr_timestamp < oldest_timestamp:
+            oldest_timestamp = curr_timestamp
+            oldest_link = curr_link
+        if oldest_link:
+          del speculative_cache[oldest_link]
+      speculative_cache[link] = (task, timestamp)
 
   # Recompress using best compression supported by the client.
   raw_output = output
