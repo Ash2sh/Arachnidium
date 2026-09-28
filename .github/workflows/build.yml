@@ -68,7 +68,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Move-Item dist/main dist/Arachnidium
+          Move-Item dist/main.exe dist/Arachnidium.exe
           Copy-Item addon.py, azure.tcl -Destination dist/Arachnidium/
           Copy-Item theme -Destination dist/Arachnidium/ -Recurse
           New-Item -ItemType Directory -Path dist/Arachnidium/bun-api | Out-Null
