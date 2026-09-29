@@ -36,7 +36,7 @@ jobs:
         if: runner.os == 'Linux'
         working-directory: bun-api
         run: |
-          curl -o bun.zip https://github.com/oven-sh/bun/releases/latest/download/bun-linux-x64.zip
+          curl -o bun.zip -L https://github.com/oven-sh/bun/releases/latest/download/bun-linux-x64.zip
           unzip bun.zip
           mv bun-linux-x64/bun .
           rm bun.zip
@@ -77,7 +77,6 @@ jobs:
           Copy-Item addon.py -Destination dist/Arachnidium/
           Copy-Item defaults.json -Destination dist/Arachnidium/
           Copy-Item theme -Destination dist/Arachnidium/ -Recurse
-          New-Item -ItemType Directory -Path dist/Arachnidium/bun-api | Out-Null
           Copy-Item bun-api -Destination dist/Arachnidium/ -Recurse
           Compress-Archive -Path dist/Arachnidium/* -DestinationPath dist/Arachnidium-windows-x64.zip
 
