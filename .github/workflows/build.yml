@@ -32,22 +32,25 @@ jobs:
       - name: Install Python dependencies
         run: uv sync
 
-      - name: Install bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Install bun-api dependencies
-        working-directory: bun-api
-        run: bun install
-
-      - name: Build bun-api (Linux)
+      - name: Download Bun (Linux)
         if: runner.os == 'Linux'
         working-directory: bun-api
-        run: bun run build-linux
+        run: |
+          curl -o bun.zip https://github.com/oven-sh/bun/releases/latest/download/bun-linux-x64.zip
+          unzip bun.zip
+          mv bun-linux-x64/bun .
+          rm bun.zip
+          rm -r bun-linux-x64
 
-      - name: Build bun-api (Windows)
+      - name: Download Bun (Windows)
         if: runner.os == 'Windows'
         working-directory: bun-api
-        run: bun run build-windows
+        run: |
+          Invoke-WebRequest https://github.com/oven-sh/bun/releases/latest/download/bun-windows-x64.zip -OutFile bun.zip
+          Expand-Archive bun.zip .
+          Move-Item bun-windows-x64/bun.exe .
+          Remove-Item bun.zip
+          Remove-Item bun-windows-x64 -Recurse -Force
 
       - name: Build with PyInstaller
         run: uv run pyinstaller main.py addon.py
@@ -61,8 +64,7 @@ jobs:
           cp addon.py dist/Arachnidium/
           cp defaults.json dist/Arachnidium/
           cp -r theme dist/Arachnidium/
-          mkdir dist/Arachnidium/bun-api
-          cp bun-api/Arachnidium-api dist/Arachnidium/bun-api/
+          cp bun-api dist/Arachnidium/
           chmod +x dist/Arachnidium/bun-api/Arachnidium-api
           tar -cJf dist/Arachnidium-linux-x64.tar.xz -C dist/Arachnidium .
 
@@ -76,7 +78,7 @@ jobs:
           Copy-Item defaults.json -Destination dist/Arachnidium/
           Copy-Item theme -Destination dist/Arachnidium/ -Recurse
           New-Item -ItemType Directory -Path dist/Arachnidium/bun-api | Out-Null
-          Copy-Item bun-api/Arachnidium-api.exe -Destination dist/Arachnidium/bun-api/
+          Copy-Item bun-api -Destination dist/Arachnidium/ -Recurse
           Compress-Archive -Path dist/Arachnidium/* -DestinationPath dist/Arachnidium-windows-x64.zip
 
       - name: Upload archive

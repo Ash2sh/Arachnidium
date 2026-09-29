@@ -386,10 +386,10 @@ def load(loader: mitmproxy.addonmanager.Loader):
     gui_thread.start()
 
   # Start Bun API
-  api_binary_name = "bun-api/Arachnidium-api" if os.name == "posix" else "bun-api/Arachnidium-api.exe"
-  if os.path.exists(api_binary_name):
+  bun_binary_name = "bun-api/bun" if os.name == "posix" else "bun-api/bun.exe"
+  if os.path.exists(bun_binary_name):
     global bun_api_process
-    bun_api_process = subprocess.Popen([api_binary_name])
+    bun_api_process = subprocess.Popen([bun_binary_name, "run", "bun-api/index.ts"])
   else:
     print("Warning: Could not find Bun API binary - please start it manually.")
 

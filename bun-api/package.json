@@ -3,10 +3,6 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
-  "scripts": {
-    "build-windows": "bun build.ts windows",
-    "build-linux": "bun build.ts linux"
-  },
   "devDependencies": {
     "@types/bun": "latest"
   },
