@@ -65,7 +65,6 @@ jobs:
           cp defaults.json dist/Arachnidium/
           cp -r theme dist/Arachnidium/
           cp -r bun-api dist/Arachnidium/
-          chmod +x dist/Arachnidium/bun-api/Arachnidium-api
           tar -cJf dist/Arachnidium-linux-x64.tar.xz -C dist/Arachnidium .
 
       - name: Package (Windows)
