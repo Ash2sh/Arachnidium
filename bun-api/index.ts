@@ -19,7 +19,7 @@ async function minifyJS (code: string) {
     });
     return minified;
   } catch (e) {
-    console.error("Failed to minify JS:", e, code);
+    console.error("Failed to minify JS:", e);
     return code;
   }
 }
