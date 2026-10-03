@@ -50,10 +50,11 @@ def start_gui():
   labels_frame = ttk.Frame(stats_frame)
   labels_frame.pack(side="left", padx=(0, 10))
 
-  saved_label_widget = ttk.Label(labels_frame, name="saved-label", text="Data saved: 0B", font=("Helvetica", 14))
+  global saved_label_widget, used_label_widget
+  saved_label_widget = ttk.Label(labels_frame, text="Data saved: 0B", font=("Helvetica", 14))
   saved_label_widget.pack(anchor="w")
 
-  used_label_widget = ttk.Label(labels_frame, name="used-label", text="Data used: 0B", font=("Helvetica", 14))
+  used_label_widget = ttk.Label(labels_frame, text="Data used: 0B", font=("Helvetica", 14))
   used_label_widget.pack(anchor="w", pady=(5, 0))
 
   def reset_savings():
@@ -240,11 +241,12 @@ def count_savings(size_before: int, size_after: int) -> None:
   data_used_fmt = sizeof_fmt(data_used)
 
   if ENABLE_GUI:
-    global gui_root, stats_frame
-    gui_root.after(0, lambda: {
-      stats_frame.children["saved-label"].config(text=("Data saved: " + data_saved_fmt)),
-      stats_frame.children["used-label"].config(text=("Data used: " + data_used_fmt))
-    })
+    global gui_root, saved_label_widget, used_label_widget
+    if "saved_label_widget" in globals() and saved_label_widget:
+      gui_root.after(0, lambda: {
+        saved_label_widget.config(text=("Data saved: " + data_saved_fmt)),
+        used_label_widget.config(text=("Data used: " + data_used_fmt))
+      })
 
   if ENABLE_DEBUG:
     print("JUST SAVED: ", sizeof_fmt(just_saved))
