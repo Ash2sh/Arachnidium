@@ -1,4 +1,5 @@
 import mitmproxy
+import mitmproxy_rs
 import tkinter as tk
 from tkinter import ttk
 
@@ -431,7 +432,7 @@ Address = 10.0.0.1/32
 DNS = 10.0.0.53
 
 [Peer]
-PublicKey = {wg_keys["server_key"]}
+PublicKey = {mitmproxy_rs.wireguard.pubkey(wg_keys["server_key"])}
 AllowedIPs = 0.0.0.0/0
 Endpoint = {wan_ip}:51820"""
     # Write config to file
