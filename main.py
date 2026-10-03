@@ -11,8 +11,10 @@ from mitmproxy.tools.main import mitmdump
 def main():
   mitmdump(args=[
     "-s", "addon.py",
-    "--mode", "wireguard:wg-keys.json",
-    "--set", "http3=false",
+    "--mode", "regular",
+        "--listen-host", "0.0.0.0",
+        "--listen-port", "8080",
+        "--set", "http3=false",
   ])
 
 if __name__ == "__main__":

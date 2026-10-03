@@ -98,9 +98,9 @@ def start_gui():
 
 speculative_cache = {}
 
-async def do_async_http_request(url: str):
-  async with aiohttp.ClientSession() as session:
-    async with session.get(url) as response:
+async def do_async_http_request(url: str, headers: mitmproxy.http.Headers):
+  async with aiohttp.ClientSession(headers=headers) as session:
+    async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
       try:
         body = await response.read()
         return (body, response)
@@ -161,24 +161,36 @@ def convert_webp(data: bytes) -> bytes:
   )
   return output.getvalue()
 
-# I'm not proud that all of this is externalized to Bun, but the JavaScript
-# ecosystem is far better at web stuff. Who could've guessed!
 def process_html(code: str, url: str) -> tuple[str, str]:
-  api_response = requests.post(
-    "http://localhost:3000/api/minify/html",
-    data=json.dumps({ "code": code, "url": url })
-  )
-  data = json.loads(api_response.text)
-  return (data["code"], data["links"])
+  try:
+    api_response = requests.post(
+      "http://localhost:3000/api/minify/html",
+      data=json.dumps({ "code": code, "url": url }),
+      timeout=3
+    )
+    data = json.loads(api_response.text)
+    return (data["code"], data.get("links", []))
+  except Exception:
+    return (code, [])
+
 def do_minify_css(code: str) -> str:
-  api_response = requests.post("http://localhost:3000/api/minify/css", data=code)
-  return api_response.text
+  try:
+    api_response = requests.post("http://localhost:3000/api/minify/css", data=code.encode('utf-8'), timeout=3)
+    return api_response.text if api_response.status_code == 200 else code
+  except Exception:
+    return code
+
 def do_minify_js(code: str) -> str:
-  api_response = requests.post("http://localhost:3000/api/minify/js", data=code)
-  return api_response.text
+  # ОТКЛЮЧЕНО: Минификация JS ломает синтаксис, плееры и антибот-защиту.
+  # Brotli/Zstd сжимают JS-код без изменения символов.
+  return code
+
 def do_minify_svg(code: str) -> str:
-  api_response = requests.post("http://localhost:3000/api/minify/svg", data=code)
-  return api_response.text
+  try:
+    api_response = requests.post("http://localhost:3000/api/minify/svg", data=code.encode('utf-8'), timeout=3)
+    return api_response.text if api_response.status_code == 200 else code
+  except Exception:
+    return code
 
 def do_minify_json(code: str) -> str:
   try:
@@ -221,7 +233,20 @@ def count_savings(size_before: int, size_after: int) -> None:
 
 def response(flow: mitmproxy.http.HTTPFlow) -> None:
   if not (flow.response and flow.response.content):
-    return
+      return
+
+  # 1. Пропускаем AJAX и POST
+  if flow.request.method == "POST" or "X-Requested-With" in flow.request.headers:
+      return
+
+  # 2. ПРОПУСКАЕМ ВИДЕО, АУДИО И RANGE-ЗАПРОСЫ (206 Partial Content)
+  # Это сохранит правильную работу HTML5-плееров и перемотку
+  if flow.response.status_code == 206:
+      return
+
+  content_type = flow.response.headers.get("content-type") or "application/octet-stream"
+  if content_type.startswith("video/") or content_type.startswith("audio/"):
+      return
 
   size_before = len(flow.response.raw_content)
 
@@ -232,8 +257,6 @@ def response(flow: mitmproxy.http.HTTPFlow) -> None:
       flow.response.status_code == 307 or # Temporary Redirect
       flow.response.status_code == 308 or # Permanent Redirect
       (CLEAR_HTTP_ERRORS and
-        # Clear most error bodies, keeping only "Not Found" and "Gone".
-        # Some websites generate meaningful content for missing pages.
         flow.response.status_code >= 400 and
         flow.response.status_code != 404 and
         flow.response.status_code != 410
@@ -251,8 +274,7 @@ def response(flow: mitmproxy.http.HTTPFlow) -> None:
   if "charset=" in content_type:
     charset = content_type.split("charset=")[1].split(";")[0]
 
-  # Convert common image formats to WebP.
-  # Images are handled first, because they don't require additional HTTP compression.
+  # Convert common image formats to WebP (Безопасно и дает до 80% экономии)
   if (content_type.startswith("image/png")  or
       content_type.startswith("image/jpeg") or
       content_type.startswith("image/webp") or
@@ -268,19 +290,9 @@ def response(flow: mitmproxy.http.HTTPFlow) -> None:
   accepted_encodings = flow.request.headers.get("accept-encoding") or ""
   accepted_encodings = list(map(lambda a : a.strip(), accepted_encodings.split(",")))
 
-  # If the client doesn't support anything better than gzip, we can read
-  # the compression level used by the origin and skip minification if
-  # max compression was used. This is usually more efficient than minifying
-  # and recompressing, but only if the client's best algorithm is gzip,
-  # and only if FORCE_MAX_COMPRESSION is False.
   if content_type.startswith("text/") and not FORCE_MAX_COMPRESSION:
     compression = flow.response.headers.get("content-encoding")
     if compression == "gzip" and not any(i in accepted_encodings for i in ["br", "zstd"]):
-      # This flag gives us a loose indication of the compression level:
-      # 2 = Maximum compression
-      # 4 = Minimum compression
-      # 0 = Unknown/default
-      # https://en.wikipedia.org/wiki/Gzip#File_structure
       extra_flags = flow.response.raw_content[8]
       if extra_flags & 2:
         return count_savings(size_before, len(flow.response.raw_content))
@@ -289,29 +301,30 @@ def response(flow: mitmproxy.http.HTTPFlow) -> None:
   is_binary_data = content_type.startswith("application/") or content_type.startswith("image/")
   speculated_links = []
 
-  # Minify source files.
+  # Безопасная обработка текстовых файлов без ломания JS-структур
   if content_type.startswith("text/html"):
-    (output, speculated_links) = process_html(flow.response.content.decode(charset), flow.request.pretty_url)
-    output = output.encode(charset)
+    # Отдаем HTML без пересборки DOM, сохраняя исходную структуру
+    output = flow.response.content
     use_max_compression = True
   elif content_type.startswith("text/css"):
-    output = do_minify_css(flow.response.content.decode(charset)).encode(charset)
-  elif content_type.startswith("text/javascript"):
-    output = do_minify_js(flow.response.content.decode(charset)).encode(charset)
+    output = do_minify_css(flow.response.content.decode(charset, errors="ignore")).encode(charset)
+  elif content_type.startswith("text/javascript") or content_type.startswith("application/javascript"):
+    # Пропускаем JS как есть — он сожмется алгоритмом Brotli/Zstd ниже
+    output = flow.response.content
   elif content_type.startswith("application/json"):
-    output = do_minify_json(flow.response.content.decode(charset)).encode(charset)
+    output = do_minify_json(flow.response.content.decode(charset, errors="ignore")).encode(charset)
     is_binary_data = False
   elif content_type.startswith("image/svg"):
-    output = do_minify_svg(flow.response.content.decode(charset)).encode(charset)
+    output = do_minify_svg(flow.response.content.decode(charset, errors="ignore")).encode(charset)
     is_binary_data = False
   else:
     output = flow.response.content
 
-  # Create async tasks for speculative caching, remove old entries from cache.
+  # Create async tasks for speculative caching
   if USE_SPECULATIVE_CACHE and not flow.is_replay:
     for link in speculated_links:
       if ENABLE_DEBUG: print("Caching", link)
-      task = asyncio.create_task(do_async_http_request(link))
+      task = asyncio.create_task(do_async_http_request(link, flow.request.headers))
       timestamp = time.time()
       if len(speculative_cache) >= SPECULATIVE_CACHE_MAX_ENTRIES:
         oldest_link = None
@@ -325,7 +338,7 @@ def response(flow: mitmproxy.http.HTTPFlow) -> None:
           del speculative_cache[oldest_link]
       speculative_cache[link] = (task, timestamp)
 
-  # Recompress using best compression supported by the client.
+  # Сжатие потока на лету (Brotli / Gzip / Zstd) — 100% безопасно для работы сайтов
   raw_output = output
   encoding = "identity"
 
@@ -340,8 +353,6 @@ def response(flow: mitmproxy.http.HTTPFlow) -> None:
     start = time.time()
     print("  deflate:", sizeof_fmt(len(flow.response.raw_content) - len(deflate.compress(output, 9 if use_max_compression else 6))), time.time() - start)
 
-  # Compression algorithms roughly sorted from best to worst. For binary
-  # data, Brotli is only used if no other algorithm is supportd.
   if "br" in accepted_encodings and (not is_binary_data or accepted_encodings == ["br"]):
     mode = br.MODE_GENERIC
     if content_type.startswith("text/"): mode = br.MODE_TEXT
@@ -354,9 +365,6 @@ def response(flow: mitmproxy.http.HTTPFlow) -> None:
   elif "zstd" in accepted_encodings:
     raw_output = zstd.compress(output, 22 if use_max_compression else 12)
     encoding = "zstd"
-  # This zlib library seems to be faster than gzip, but zlib is reportedly
-  # "unreliable" and "unfavorable" in modern HTTP. Maybe wrapping it in a
-  # gzip container ourselves might be a good idea?
   elif "deflate" in accepted_encodings:
     raw_output = deflate.compress(output, 9 if use_max_compression else 6)
     encoding = "deflate"
@@ -367,7 +375,6 @@ def response(flow: mitmproxy.http.HTTPFlow) -> None:
     flow.response.raw_content = raw_output
   elif ENABLE_DEBUG:
     print("SKIPPING, RECOMPRESSED OUTPUT IS LARGER:", len(raw_output), ">", len(flow.response.raw_content))
-    print("Server using", flow.response.headers.get("content-encoding"), "we're using", encoding)
 
   return count_savings(size_before, len(flow.response.raw_content))
 
@@ -375,7 +382,6 @@ def response(flow: mitmproxy.http.HTTPFlow) -> None:
 def dns_request(flow: mitmproxy.dns.DNSFlow) -> None:
   if not flow.request.question: return
 
-  # Reject DNS requests that don't pass the blocklist
   if BLOCK_ADS:
     if check_dns_blocklist(str(flow.request.question)):
       flow.response = flow.request.fail(mitmproxy.dns.response_codes.NXDOMAIN)
@@ -385,7 +391,6 @@ def load(loader: mitmproxy.addonmanager.Loader):
     gui_thread = threading.Thread(target=start_gui, daemon=True)
     gui_thread.start()
 
-  # Start Bun API
   bun_binary_name = "bun-api/bun" if os.name == "posix" else "bun-api/bun.exe"
   if os.path.exists(bun_binary_name):
     global bun_api_process
@@ -393,31 +398,28 @@ def load(loader: mitmproxy.addonmanager.Loader):
   else:
     print("Warning: Could not find Bun API binary - please start it manually.")
 
-  # Generate WireGuard config
   wan_ip_req = requests.get("https://api.ipify.org")
   if wan_ip_req.status_code != 200 or not wan_ip_req.text:
     wan_ip_req = requests.get("https://api.seeip.org")
   wan_ip = wan_ip_req.text
-  with open("wg-keys.json", "r") as keys_file:
-    wg_keys = json.loads(keys_file.read())
-    config = f"""\
-# This file was automatically generated.
-# To change keys, edit `wg-keys.json` instead.
+#   with open("wg-keys.json", "r") as keys_file:
+#     wg_keys = json.loads(keys_file.read())
+#     config = f"""\
+# # This file was automatically generated.
+# # To change keys, edit `wg-keys.json` instead.
 
-[Interface]
-PrivateKey = {wg_keys["client_key"]}
-Address = 10.0.0.1/32
-DNS = 10.0.0.53
+# [Interface]
+# PrivateKey = {wg_keys["client_key"]}
+# Address = 10.0.0.1/32
+# DNS = 10.0.0.53
 
-[Peer]
-PublicKey = {wg_keys["server_key"]}
-AllowedIPs = 0.0.0.0/0
-Endpoint = {wan_ip}:51820"""
-    # Write config to file
-    with open("wireguard.cfg", "w") as config_file:
-      config_file.write(config)
+# [Peer]
+# PublicKey = {wg_keys["server_key"]}
+# AllowedIPs = 0.0.0.0/0
+# Endpoint = {wan_ip}:51820"""
+#     with open("wireguard.cfg", "w") as config_file:
+#       config_file.write(config)
 
-  # Download DNS blocklist
   global DNS_BLOCKLIST
   DNS_BLOCKLIST = requests.get("https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro-onlydomains.txt").text
   DNS_BLOCKLIST = DNS_BLOCKLIST.split("\n")

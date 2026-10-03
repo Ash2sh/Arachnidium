@@ -4,14 +4,21 @@ import { minifyHtml } from '@node-minify/minify-html';
 import * as html from "node-html-parser";
 import * as svgo from "svgo";
 
-async function minifyJS (code: string) {
+async function minifyJS(code: string) {
   try {
-    // Sometimes we just get JSON??
-    // And for some reason that crashes the minifier???
+    const trimmed = code.trim();
+
+    // 1. Если это HTML (ошибка 503/404 от сервера), не передаем в esbuild
+    if (trimmed.startsWith("<")) {
+      return code;
+    }
+
+    // 2. Исправленный баг с JSON: если пришел JSON, минимизируем его, а не оборачиваем в кавычки
     try {
-      JSON.parse(code.trim());
-      return JSON.stringify(code);
+      const parsed = JSON.parse(trimmed);
+      return JSON.stringify(parsed);
     } catch (_) { }
+
     const minified = await minify({
       compressor: esbuild,
       type: "js",
@@ -19,13 +26,18 @@ async function minifyJS (code: string) {
     });
     return minified;
   } catch (e) {
-    console.error("Failed to minify JS:", e);
+    // Не спамим длинными трейсами в консоль при ошибках синтаксиса
     return code;
   }
 }
 
-async function minifyCSS (code: string) {
+async function minifyCSS(code: string) {
   try {
+    const trimmed = code.trim();
+    if (trimmed.startsWith("<")) {
+      return code;
+    }
+
     const minified = await minify({
       compressor: esbuild,
       type: "css",
@@ -33,45 +45,29 @@ async function minifyCSS (code: string) {
     });
     return minified;
   } catch (e) {
-    console.error("Failed to minify CSS:", e);
     return code;
   }
 }
 
-async function minifySVG (code: string) {
+async function minifySVG(code: string) {
   try {
-    // Mostly default config with float precision 1
     const minified = svgo.optimize(code, {
       floatPrecision: 1,
       multipass: true,
       plugins: [
         {
           name: "cleanupListOfValues",
-          params: {
-            floatPrecision: 1
-          }
+          params: { floatPrecision: 1 }
         },
         {
           name: "preset-default",
           params: {
             overrides: {
-              "cleanupNumericValues": {
-                floatPrecision: 1
-              },
-              "mergePaths": {
-                floatPrecision: 1
-              },
-              "convertShapeToPath": {
-                floatPrecision: 1
-              },
-              "convertTransform": {
-                floatPrecision: 1,
-                degPrecision: 0
-              },
-              "convertPathData": {
-                floatPrecision: 1,
-                transformPrecision: 1
-              }
+              "cleanupNumericValues": { floatPrecision: 1 },
+              "mergePaths": { floatPrecision: 1 },
+              "convertShapeToPath": { floatPrecision: 1 },
+              "convertTransform": { floatPrecision: 1, degPrecision: 0 },
+              "convertPathData": { floatPrecision: 1, transformPrecision: 1 }
             }
           }
         }
@@ -79,38 +75,36 @@ async function minifySVG (code: string) {
     });
     return minified.data;
   } catch (e) {
-    console.error("Failed to minify SVG:", e);
     return code;
   }
 }
 
-async function minifyHTML (code: string, baseURL: string): Promise<{ code: string, links: string[] }> {
+async function minifyHTML(code: string, baseURL: string): Promise<{ code: string, links: string[] }> {
   try {
     const root = html.parse(code, {
       preserveTagNesting: true,
       parseNoneClosedTags: true
     });
-    // Minify inlined JS/CSS/SVG
+
+    // 1. Минификация вложенных <script>
     const scripts = root.querySelectorAll("script");
-    const stylesheets = root.querySelectorAll("style");
-    const svgs = root.querySelectorAll("svg");
     for (const script of scripts) {
       if (!script.innerHTML.trim()) continue;
       script.innerHTML = await minifyJS(script.innerHTML);
     }
-    code = root.outerHTML;
+
+    // 2. Минификация вложенных <style>
+    const stylesheets = root.querySelectorAll("style");
     for (const stylesheet of stylesheets) {
       if (!stylesheet.innerHTML.trim()) continue;
       stylesheet.innerHTML = await minifyCSS(stylesheet.innerHTML);
     }
-    code = root.outerHTML;
+
+    // 3. Оптимизация SVG
+    const svgs = root.querySelectorAll("svg");
     for (const svg of svgs) {
       if (!svg.innerHTML.trim()) continue;
-      /**
-       * Annoyingly, SVGO throws errors on attributes without a value.
-       * To work around this, we temporarily give all empty attributes
-       * a (hopefully) unique value, then remove it after optimizing.
-       */
+
       const elementsBefore = svg.querySelectorAll("*");
       for (const element of elementsBefore) {
         for (const attribute in element.attributes) {
@@ -119,25 +113,29 @@ async function minifyHTML (code: string, baseURL: string): Promise<{ code: strin
           }
         }
       }
+
       const minified = await minifySVG(svg.innerHTML);
       svg.innerHTML = minified;
+
       const elementsAfter = svg.querySelectorAll("*");
       for (const element of elementsAfter) {
         for (const attribute in element.attributes) {
-          if (element.getAttribute(attribute) == "////EMPTY////") {
+          if (element.getAttribute(attribute) === "////EMPTY////") {
             element.setAttribute(attribute, "");
           }
         }
       }
     }
-    code = root.outerHTML;
-    // Remove "integrity" attribute from existing script/link elements
+
+    // 4. Удаление атрибутов integrity для предотвращения блокировок браузером
     const imports = root.querySelectorAll("script, link");
     for (const element of imports) {
-      if (!element.hasAttribute("integrity")) continue;
-      element.removeAttribute("integrity");
+      if (element.hasAttribute("integrity")) {
+        element.removeAttribute("integrity");
+      }
     }
-    // Inject script to prevent setting "integrity" programmatically
+
+    // 5. Внедрение скрипта-хака
     const integrityHack = `<script>[HTMLScriptElement,HTMLLinkElement].forEach(e=>{Object.defineProperty(e.prototype,"integrity",{set:()=>{}})})</script>`;
     const headTag = root.querySelector("head");
     if (headTag) {
@@ -145,22 +143,31 @@ async function minifyHTML (code: string, baseURL: string): Promise<{ code: strin
     } else {
       root.innerHTML = integrityHack + root.innerHTML;
     }
-    code = root.outerHTML;
-    code = await minify({
+
+    // 6. Безопасный сбор всех ссылок для speculative cache
+    const rawLinks = [
+      ...root.querySelectorAll("[src]").map(e => e.getAttribute("src")),
+      ...root.querySelectorAll("link[href]").map(e => e.getAttribute("href"))
+    ].filter((v): v is string => Boolean(v) && !v.startsWith("data:") && !v.startsWith("javascript:"));
+
+    const links: string[] = [];
+    for (const link of rawLinks) {
+      try {
+        links.push(new URL(link, baseURL).toString());
+      } catch (_) {
+        // Игнорируем невалидные URL
+      }
+    }
+
+    // 7. Итоговая минификация HTML
+    const minifiedCode = await minify({
       compressor: minifyHtml,
-      content: code
+      content: root.outerHTML
     });
-    const links = root.querySelectorAll("[src]")
-      .map(e => e.getAttribute("src") || "")
-      .filter(v => v)
-      .concat(
-        root.querySelectorAll("link[href]")
-          .map(e => e.getAttribute("href") || "")
-          .filter(v => v)
-      ).map(v => new URL(v, baseURL).toString());
-    return { code, links };
+
+    return { code: minifiedCode, links };
   } catch (e) {
-    console.error("Failed to remove integrity hashes:", e);
+    console.error("Failed to minify HTML:", e);
     return { code, links: [] };
   }
 }
