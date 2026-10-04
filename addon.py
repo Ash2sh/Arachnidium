@@ -345,6 +345,20 @@ def response(flow: mitmproxy.http.HTTPFlow) -> None:
     start = time.time()
     print("  deflate:", sizeof_fmt(len(flow.response.raw_content) - len(deflate.compress(output, 9 if use_max_compression else 6))), time.time() - start)
 
+
+  already_compressed_types = (
+        "application/zip",
+        "application/x-zip-compressed",
+        "application/x-7z-compressed",
+        "application/x-rar-compressed",
+        "application/x-gzip",
+        "application/x-bzip2",
+        "application/octet-stream",
+    )
+
+  if content_type.startswith(already_compressed_types):
+    return count_savings(size_before, len(flow.response.raw_content))
+
   # Compression algorithms roughly sorted from best to worst. For binary
   # data, Brotli is only used if no other algorithm is supportd.
   if "br" in accepted_encodings and (not is_binary_data or accepted_encodings == ["br"]):
