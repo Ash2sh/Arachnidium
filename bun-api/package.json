@@ -3,6 +3,9 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "build": "bun build --compile --target=bun-windows-x64 --minify ./index.ts --outfile ./Arachnidium-api/bun.exe"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },

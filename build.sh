@@ -1,8 +1,7 @@
 #!/bin/bash
-source .venv/bin/activate
-pyinstaller main.py addon.py
+source .venv/Scripts/activate
+pyinstaller main.py
 mv dist/main dist/Arachnidium
-cp addon.py dist/Arachnidium/
 cp -r theme dist/Arachnidium/
 cd bun-api
 bun run build

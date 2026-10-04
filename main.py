@@ -6,16 +6,38 @@
   and communicating between those seems like hell.
 """
 
-from mitmproxy.tools.main import mitmdump
+import asyncio
+
+from mitmproxy.options import Options
+from mitmproxy.tools.dump import DumpMaster
+
+import addon
+
+
+async def start_proxy():
+    opts = Options(
+        mode=["regular"],
+        listen_host="0.0.0.0",
+        listen_port=8080,
+        http3=False,
+    )
+
+    master = DumpMaster(opts)
+
+    master.addons.add(addon)
+
+    try:
+        await master.run()
+    except KeyboardInterrupt:
+        master.shutdown()
 
 def main():
-  mitmdump(args=[
-    "-s", "addon.py",
-    "--mode", "regular",
-        "--listen-host", "0.0.0.0",
-        "--listen-port", "8080",
-        "--set", "http3=false",
-  ])
+    asyncio.run(start_proxy())
 
 if __name__ == "__main__":
-  main()
+  try:
+    main()
+  except Exception as e:
+    print(e)
+  finally:
+    input("Press enter to exit...")
