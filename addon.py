@@ -31,6 +31,7 @@ with open("defaults.json", "r") as defaults_json:
   CLEAR_HTTP_ERRORS = defaults["CLEAR_HTTP_ERRORS"]
   BLOCK_ADS = defaults["BLOCK_ADS"]
   ENABLE_DEBUG = defaults["ENABLE_DEBUG"]
+  MAX_PROCESSING_SIZE_MB = defaults["MAX_PROCESSING_SIZE_MB"]
 
 def start_gui():
   if not ENABLE_GUI: return
@@ -225,6 +226,9 @@ def response(flow: mitmproxy.http.HTTPFlow) -> None:
     return
 
   size_before = len(flow.response.raw_content)
+
+  if size_before > MAX_PROCESSING_SIZE_MB * 1024 * 1024:
+    return
 
   # Clear the body of responses that don't use it.
   if (flow.response.status_code == 301 or # Moved Permanently
