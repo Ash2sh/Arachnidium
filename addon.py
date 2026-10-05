@@ -356,7 +356,7 @@ def response(flow: mitmproxy.http.HTTPFlow) -> None:
         "application/octet-stream",
     )
 
-  if content_type.startswith(already_compressed_types):
+  if not FORCE_MAX_COMPRESSION and content_type.startswith(already_compressed_types):
     return count_savings(size_before, len(flow.response.raw_content))
 
   # Compression algorithms roughly sorted from best to worst. For binary
