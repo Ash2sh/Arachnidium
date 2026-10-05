@@ -1,4 +1,5 @@
 import mitmproxy
+import mitmproxy_rs
 import tkinter as tk
 from tkinter import ttk
 
@@ -30,6 +31,7 @@ with open("defaults.json", "r") as defaults_json:
   CLEAR_HTTP_ERRORS = defaults["CLEAR_HTTP_ERRORS"]
   BLOCK_ADS = defaults["BLOCK_ADS"]
   ENABLE_DEBUG = defaults["ENABLE_DEBUG"]
+  MAX_PROCESSING_SIZE_MB = defaults["MAX_PROCESSING_SIZE_MB"]
 
 def start_gui():
   if not ENABLE_GUI: return
@@ -271,6 +273,9 @@ def response(flow: mitmproxy.http.HTTPFlow) -> None:
 
   size_before = len(flow.response.raw_content)
 
+  if size_before > MAX_PROCESSING_SIZE_MB * 1024 * 1024:
+    return
+
   # Clear the body of responses that don't use it.
   if (flow.response.status_code == 301 or # Moved Permanently
       flow.response.status_code == 302 or # Found (Moved Temporarily)
@@ -374,6 +379,22 @@ def response(flow: mitmproxy.http.HTTPFlow) -> None:
     start = time.time()
     print("  deflate:", sizeof_fmt(len(flow.response.raw_content) - len(deflate.compress(output, 9 if use_max_compression else 6))), time.time() - start)
 
+
+  already_compressed_types = (
+        "application/zip",
+        "application/x-zip-compressed",
+        "application/x-7z-compressed",
+        "application/x-rar-compressed",
+        "application/x-gzip",
+        "application/x-bzip2",
+        "application/octet-stream",
+    )
+
+  if content_type.startswith(already_compressed_types):
+    return count_savings(size_before, len(flow.response.raw_content))
+
+  # Compression algorithms roughly sorted from best to worst. For binary
+  # data, Brotli is only used if no other algorithm is supportd.
   if "br" in accepted_encodings and (not is_binary_data or accepted_encodings == ["br"]):
     mode = br.MODE_GENERIC
     if content_type.startswith("text/"): mode = br.MODE_TEXT
@@ -434,12 +455,13 @@ def load(loader: mitmproxy.addonmanager.Loader):
 # Address = 10.0.0.1/32
 # DNS = 10.0.0.53
 
-# [Peer]
-# PublicKey = {wg_keys["server_key"]}
-# AllowedIPs = 0.0.0.0/0
-# Endpoint = {wan_ip}:51820"""
-#     with open("wireguard.cfg", "w") as config_file:
-#       config_file.write(config)
+[Peer]
+PublicKey = {mitmproxy_rs.wireguard.pubkey(wg_keys["server_key"])}
+AllowedIPs = 0.0.0.0/0
+Endpoint = {wan_ip}:51820"""
+    # Write config to file
+    with open("wireguard.cfg", "w") as config_file:
+      config_file.write(config)
 
   global DNS_BLOCKLIST
   DNS_BLOCKLIST = requests.get("https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro-onlydomains.txt").text
