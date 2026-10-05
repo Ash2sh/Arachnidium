@@ -1,9 +1,9 @@
 """
-  This file is just the entrypoint. All application code is in `addon.py`.
+This file is just the entrypoint. All application code is in `addon.py`.
 
-  I'm not proud of this layout, but I frankly do not care enough. It seems
-  like mitmproxy creates a separate Python environment for the addons(?),
-  and communicating between those seems like hell.
+I'm not proud of this layout, but I frankly do not care enough. It seems
+like mitmproxy creates a separate Python environment for the addons(?),
+and communicating between those seems like hell.
 """
 
 import asyncio
@@ -20,9 +20,15 @@ async def start_proxy():
         listen_host="0.0.0.0",
         listen_port=8080,
         http3=False,
+        ssl_insecure=True,
     )
 
     master = DumpMaster(opts)
+
+    master.options.update(
+        stream_large_bodies="51m",
+        flow_detail=0,
+    )
 
     master.addons.add(addon)
 
@@ -31,13 +37,10 @@ async def start_proxy():
     except KeyboardInterrupt:
         master.shutdown()
 
+
 def main():
     asyncio.run(start_proxy())
 
+
 if __name__ == "__main__":
-  try:
-    main()
-  except Exception as e:
-    print(e)
-  finally:
-    input("Press enter to exit...")
+  main()
