@@ -227,7 +227,7 @@ def response(flow: mitmproxy.http.HTTPFlow) -> None:
 
   size_before = len(flow.response.raw_content)
 
-  if size_before > MAX_PROCESSING_SIZE_MB * 1024 * 1024:
+  if not FORCE_MAX_COMPRESSION and size_before > MAX_PROCESSING_SIZE_MB * 1024 * 1024:
     return
 
   # Clear the body of responses that don't use it.
